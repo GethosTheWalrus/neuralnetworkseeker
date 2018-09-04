@@ -1,7 +1,9 @@
 import pygame
+from keras.models import Sequential
+from keras.layers.core import Activation, Dense
+import os
 import random
 import math
-import nn as neuralnetwork
 import numpy as np
 
 clock = pygame.time.Clock()
@@ -22,34 +24,56 @@ foods = {
         "rect_x": 0,
         "rect_y": 0,
         "rect_w": 10,
-        "rect_h": 10
+        "rect_h": 10,
+        "r": 255,
+        "g": 128,
+        "b": 128
     },
     "food_dim2": {
         "rect_x": 0,
         "rect_y": 0,
         "rect_w": 10,
-        "rect_h": 10
+        "rect_h": 10,
+        "r": 255,
+        "g": 128,
+        "b": 128
     },
     "food_dim3": {
         "rect_x": 0,
         "rect_y": 0,
         "rect_w": 10,
-        "rect_h": 10
+        "rect_h": 10,
+        "r": 255,
+        "g": 128,
+        "b": 128
     },
     "food_dim4": {
         "rect_x": 0,
         "rect_y": 0,
         "rect_w": 10,
-        "rect_h": 10
+        "rect_h": 10,
+        "r": 255,
+        "g": 128,
+        "b": 128
     },
     "food_dim5": {
         "rect_x": 0,
         "rect_y": 0,
         "rect_w": 10,
-        "rect_h": 10
+        "rect_h": 10,
+        "r": 255,
+        "g": 128,
+        "b": 128
     }
 
 }
+
+model = Sequential()
+model.add(Dense(64, input_dim=10, activation='relu'))
+model.add(Dense(128, input_dim=64, activation='sigmoid'))
+model.add(Dense(4, activation='softmax'))
+
+model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
 
 pygame.init()
 screen = pygame.display.set_mode((resolution_x, resolution_y))
@@ -58,9 +82,10 @@ totalError = 0
 sumError = 0
 numEpochs = 1
 
-# create the network object
-nn = neuralnetwork.neuralNetwork()
-nn.loadconfig("seeker")
+closest = None
+distance = float("inf")
+food_dim = None
+features = []
 
 def angle_between(p1, p2):
     # ang1 = np.arctan2(*p1[::-1])
@@ -69,49 +94,52 @@ def angle_between(p1, p2):
     ang = math.degrees(math.atan2(p2[1]-p1[1], p2[0]-p1[0]))
     return ang
 
-def move(rect_dim, foods, nn):
+def move(rect_dim, foods):
     # find which food is the shortest distance from the eater
-    distance = float("inf")
-    food_dim = None
-    features = []
-    # Gets all the angles and distances between the eater and the foods
-    for food_name in foods:
+    global closest, distance, food_dim, features
+
+    if closest == None:
+        distance = float("inf")
+        food_dim = None
+        features = []
+    
         # calculate the distance between the eater and the food
-        dist_to_food = math.hypot(foods[food_name]["rect_x"] - rect_dim["rect_x"], foods[food_name]["rect_y"] - rect_dim["rect_y"])
-        if dist_to_food < distance:
-            distance = dist_to_food
-            food_dim = foods[food_name]
+        for food in foods:
+            foods[food]["r"], foods[food]["g"] = 255, 128
 
-        # get the angle between the eater and the food
-        angle_between_points = angle_between([rect_dim["rect_x"], rect_dim["rect_y"]], [foods[food_name]["rect_x"], foods[food_name]["rect_y"]])
+            dist_to_food = math.hypot(foods[food]["rect_x"] - rect_dim["rect_x"], foods[food]["rect_y"] - rect_dim["rect_y"])
 
-        # calculate the distance between the eater and the food before it moves
-        dist_before = math.hypot(food_dim["rect_x"] - rect_dim["rect_x"], foods[food_name]["rect_y"] - foods[food_name]["rect_y"])
+            angle_between_points = angle_between([rect_dim["rect_x"], rect_dim["rect_y"]], [foods[food]["rect_x"], foods[food]["rect_y"]])
 
-        # normalize features
-        angle_between_points = abs(angle_between_points / 180)
-        dist_before = 1 / (1 + np.exp(-dist_before)) 
+            features.append(dist_to_food)
+            features.append(angle_between_points)
 
-        # add the normalized features to the feature vector
-        features.append(angle_between_points)
-        features.append(dist_before)
+            # print(dist_to_food)
+
+            if dist_to_food < distance:
+                distance = dist_to_food
+                food_dim = foods[food]
+
+        # print("-----------------------------------------")
+
+    closest = food_dim
+    food_dim["r"], food_dim["g"] = 128, 255
 
     # generate the position modifiers
-    # modifier_network = nn.query([angle_between_points, dist_before])
-    modifier_network = nn.query(features)
-    if modifier_network[1] > modifier_network[3]:
-        modifier_x = -1
-    elif modifier_network[1] < modifier_network[3]:
-        modifier_x = 1
-    else:
-        modifier_x = 0
+    modifier_x, modifier_y = 0, 0
+    modifier_network = model.predict(np.array([features]))
+    modifier_network = modifier_network[0]
 
-    if modifier_network[0] > modifier_network[2]:
+    max_index, _ = max(enumerate(modifier_network), key=lambda p: p[1])
+
+    if max_index == 0:
         modifier_y = -1
-    elif modifier_network[0] < modifier_network[2]:
+    elif max_index == 1:
+        modifier_x = -1
+    elif max_index == 2:
         modifier_y = 1
-    else:
-        modifier_y = 0
+    elif max_index == 3:
+        modifier_x = 1
 
     # move the eater along the x axis
     rect_dim["rect_x"] += modifier_x
@@ -134,7 +162,9 @@ def move(rect_dim, foods, nn):
 
     inputs = features
 
-    return nn.train(inputs, targets)
+    model.fit(np.array([inputs]), np.array([targets]), nb_epoch=1, verbose=2)
+    return None
+    # return nn.train(inputs, targets)
 
 def new_food(food_dim):
     food_x = random.randint(0, resolution_x - food_dim["rect_w"])
@@ -152,7 +182,6 @@ while not done:
     # check events
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            nn.saveconfig("seeker")
             done = True
 
     # refresh display
@@ -169,21 +198,22 @@ while not done:
     # food
     for food_name in foods:
         food = pygame.Rect(foods[food_name]["rect_x"], foods[food_name]["rect_y"], foods[food_name]["rect_w"], foods[food_name]["rect_h"])
-        pygame.draw.rect(screen, (255, 128, 128), food)
+        pygame.draw.rect(screen, (foods[food_name]["r"], foods[food_name]["g"], foods[food_name]["b"]), food)
 
         if eater.colliderect(food):
             new_food(foods[food_name])
+            closest = None
 
-    error = move(rect_dim, foods, nn)
+    error = move(rect_dim, foods)
 
     # show percent error
-    numEpochs += 1
-    sumError += abs(round(error[0][0] * 100, 2))
-    totalError = round(sumError / numEpochs, 2)
-    basicfont = pygame.font.SysFont(None, 20)
-    text = basicfont.render("Current error : {}%".format(abs(round(error[0][0] * 100, 2))), True, (255, 0, 0), (255, 255, 255))
-    text2 = basicfont.render("Average error over {} epochs: {}%".format(numEpochs, totalError), True, (255, 0, 0), (255, 255, 255))
-    screen.blit(text,(10,10))
-    screen.blit(text2,(10,30))
+    # numEpochs += 1
+    # sumError += abs(round(error[0][0] * 100, 2))
+    # totalError = round(sumError / numEpochs, 2)
+    # basicfont = pygame.font.SysFont(None, 20)
+    # text = basicfont.render("Current error : {}%".format(abs(round(error[0][0] * 100, 2))), True, (255, 0, 0), (255, 255, 255))
+    # text2 = basicfont.render("Average error over {} epochs: {}%".format(numEpochs, totalError), True, (255, 0, 0), (255, 255, 255))
+    # screen.blit(text,(10,10))
+    # screen.blit(text2,(10,30))
 
     # clock.tick(60)
