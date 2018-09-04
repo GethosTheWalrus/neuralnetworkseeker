@@ -69,11 +69,11 @@ foods = {
 }
 
 model = Sequential()
-model.add(Dense(64, input_dim=10, activation='relu'))
-model.add(Dense(128, input_dim=64, activation='sigmoid'))
+model.add(Dense(128, input_dim=10, activation='relu'))
+model.add(Dense(128, input_dim=128, activation='sigmoid'))
 model.add(Dense(4, activation='softmax'))
 
-model.compile(loss='mean_squared_error', optimizer='adam', metrics=['accuracy'])
+model.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
 
 pygame.init()
 screen = pygame.display.set_mode((resolution_x, resolution_y))
@@ -162,7 +162,7 @@ def move(rect_dim, foods):
 
     inputs = features
 
-    model.fit(np.array([inputs]), np.array([targets]), nb_epoch=1, verbose=2)
+    model.fit(np.array([inputs]), np.array([targets]), epochs=1, verbose=2)
     return None
     # return nn.train(inputs, targets)
 
