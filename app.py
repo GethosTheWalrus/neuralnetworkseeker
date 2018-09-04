@@ -2,6 +2,7 @@ import pygame
 from keras.models import Sequential
 from keras.layers.core import Activation, Dense
 from keras.callbacks import History 
+from pathlib import Path
 import os
 import random
 import math
@@ -71,8 +72,12 @@ foods = {
 
 model = Sequential()
 model.add(Dense(128, input_dim=10, activation='relu'))
-model.add(Dense(512, input_dim=256, activation='sigmoid'))
+model.add(Dense(512, input_dim=256, activation='tanh'))
 model.add(Dense(4, activation='softmax'))
+
+weights = Path("weights.h5")
+if weights.is_file():
+    model.load_weights('weights.h5')
 
 model.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
 
@@ -136,16 +141,6 @@ def move(rect_dim, foods):
 
     max_index, _ = max(enumerate(modifier_network), key=lambda p: p[1])
 
-    # if modifier_network[0] > modifier_network[3]:
-    #     modifier_y = -1
-    # elif modifier_network[0] < modifier_network[3]:
-    #     modifier_y = 1
-
-    # if modifier_network[1] > modifier_network[3]:
-    #     modifier_x = -1
-    # elif modifier_network[1] < modifier_network[3]:
-    #     modifier_x = 1
-
     if max_index == 0:
         modifier_y = -1
     elif max_index == 1:
@@ -164,15 +159,19 @@ def move(rect_dim, foods):
     # Train then network. This calculates what we expect the network to do, and compares it
     # to what the network actually decided to do
     targets = [0, 0, 0, 0]
-    if (rect_dim["rect_x"] + rect_dim["rect_w"]) - (food_dim["rect_x"] + food_dim["rect_w"]) > 0:
-        targets[1] = 1
-    elif (rect_dim["rect_x"] + rect_dim["rect_w"]) - (food_dim["rect_x"] + food_dim["rect_w"]) < 0:
-        targets[3] = 1
-    
-    if (rect_dim["rect_y"] + rect_dim["rect_h"]) - (food_dim["rect_y"] + food_dim["rect_h"]) > 0:
-        targets[0] = 1
-    elif (rect_dim["rect_y"] + rect_dim["rect_h"]) - (food_dim["rect_y"] + food_dim["rect_h"]) < 0:
-        targets[2] = 1
+    distances = [(rect_dim["rect_x"] + rect_dim["rect_w"]) - (food_dim["rect_x"] + food_dim["rect_w"]), (rect_dim["rect_y"] + rect_dim["rect_h"]) - (food_dim["rect_y"] + food_dim["rect_h"])]
+    if abs(distances[0]) > abs(distances[1]):
+        if distances[0] > 0:
+            targets[1] = 1
+        elif distances[0] < 0:
+            targets[3] = 1
+    elif abs(distances[1]) > abs(distances[0]):
+        if distances[1] > 0:
+            targets[0] = 1
+        elif distances[1] < 0:
+            targets[2] = 1
+
+    print([modifier_x, modifier_y], targets, currentLoss)
 
     inputs = features
 
@@ -197,6 +196,7 @@ while not done:
     # check events
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
+            model.save_weights('weights.h5')
             done = True
 
     # refresh display
