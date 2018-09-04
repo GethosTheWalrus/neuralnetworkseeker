@@ -1,6 +1,7 @@
 import pygame
 from keras.models import Sequential
 from keras.layers.core import Activation, Dense
+from keras.callbacks import History 
 import os
 import random
 import math
@@ -70,7 +71,7 @@ foods = {
 
 model = Sequential()
 model.add(Dense(128, input_dim=10, activation='relu'))
-model.add(Dense(128, input_dim=128, activation='sigmoid'))
+model.add(Dense(512, input_dim=256, activation='sigmoid'))
 model.add(Dense(4, activation='softmax'))
 
 model.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
@@ -78,8 +79,10 @@ model.compile(loss='binary_crossentropy', optimizer='sgd', metrics=['accuracy'])
 pygame.init()
 screen = pygame.display.set_mode((resolution_x, resolution_y))
 done = False
-totalError = 0
-sumError = 0
+totalLoss = 0
+currentLoss = 0
+totalAccuracy = 0
+sumLoss = 0
 numEpochs = 1
 
 closest = None
@@ -96,7 +99,7 @@ def angle_between(p1, p2):
 
 def move(rect_dim, foods):
     # find which food is the shortest distance from the eater
-    global closest, distance, food_dim, features
+    global closest, distance, food_dim, features, totalLoss, totalAccuracy, currentLoss
 
     if closest == None:
         distance = float("inf")
@@ -111,14 +114,15 @@ def move(rect_dim, foods):
 
             angle_between_points = angle_between([rect_dim["rect_x"], rect_dim["rect_y"]], [foods[food]["rect_x"], foods[food]["rect_y"]])
 
-            features.append(dist_to_food)
-            features.append(angle_between_points)
+            features.append((1 / (1 + np.exp(dist_to_food))))
+            features.append(angle_between_points / 180)
 
             # print(dist_to_food)
 
             if dist_to_food < distance:
                 distance = dist_to_food
                 food_dim = foods[food]
+                distanceToTarget = distance
 
         # print("-----------------------------------------")
 
@@ -131,6 +135,16 @@ def move(rect_dim, foods):
     modifier_network = modifier_network[0]
 
     max_index, _ = max(enumerate(modifier_network), key=lambda p: p[1])
+
+    # if modifier_network[0] > modifier_network[3]:
+    #     modifier_y = -1
+    # elif modifier_network[0] < modifier_network[3]:
+    #     modifier_y = 1
+
+    # if modifier_network[1] > modifier_network[3]:
+    #     modifier_x = -1
+    # elif modifier_network[1] < modifier_network[3]:
+    #     modifier_x = 1
 
     if max_index == 0:
         modifier_y = -1
@@ -154,7 +168,7 @@ def move(rect_dim, foods):
         targets[1] = 1
     elif (rect_dim["rect_x"] + rect_dim["rect_w"]) - (food_dim["rect_x"] + food_dim["rect_w"]) < 0:
         targets[3] = 1
-
+    
     if (rect_dim["rect_y"] + rect_dim["rect_h"]) - (food_dim["rect_y"] + food_dim["rect_h"]) > 0:
         targets[0] = 1
     elif (rect_dim["rect_y"] + rect_dim["rect_h"]) - (food_dim["rect_y"] + food_dim["rect_h"]) < 0:
@@ -162,13 +176,14 @@ def move(rect_dim, foods):
 
     inputs = features
 
-    model.fit(np.array([inputs]), np.array([targets]), epochs=1, verbose=2)
-    return None
-    # return nn.train(inputs, targets)
+    hist = model.fit(np.array([inputs]), np.array([targets]), epochs=1, verbose=0)
+    currentLoss = hist.history["loss"][0]
+    totalLoss += hist.history["loss"][0]
+    totalAccuracy += hist.history["acc"][0]
 
 def new_food(food_dim):
     food_x = random.randint(0, resolution_x - food_dim["rect_w"])
-    food_y = random.randint(0, resolution_y - food_dim["rect_h"])
+    food_y = random.randint(35, resolution_y - food_dim["rect_h"])
 
     food_dim["rect_x"] = food_x
     food_dim["rect_y"] = food_y
@@ -204,16 +219,16 @@ while not done:
             new_food(foods[food_name])
             closest = None
 
-    error = move(rect_dim, foods)
+    move(rect_dim, foods)
 
     # show percent error
-    # numEpochs += 1
-    # sumError += abs(round(error[0][0] * 100, 2))
-    # totalError = round(sumError / numEpochs, 2)
-    # basicfont = pygame.font.SysFont(None, 20)
-    # text = basicfont.render("Current error : {}%".format(abs(round(error[0][0] * 100, 2))), True, (255, 0, 0), (255, 255, 255))
-    # text2 = basicfont.render("Average error over {} epochs: {}%".format(numEpochs, totalError), True, (255, 0, 0), (255, 255, 255))
-    # screen.blit(text,(10,10))
-    # screen.blit(text2,(10,30))
+    numEpochs += 1
+    sumLoss += abs(round(currentLoss * 100, 2))
+    totalLoss = round(sumLoss / numEpochs, 2)
+    basicfont = pygame.font.SysFont(None, 20)
+    text = basicfont.render("Current Loss : {}%".format(abs(round(currentLoss * 100, 2))), True, (255, 0, 0), (255, 255, 255))
+    text2 = basicfont.render("Average Loss over {} epochs: {}%".format(numEpochs, totalLoss), True, (255, 0, 0), (255, 255, 255))
+    screen.blit(text,(10,10))
+    screen.blit(text2,(10,30))
 
     # clock.tick(60)
